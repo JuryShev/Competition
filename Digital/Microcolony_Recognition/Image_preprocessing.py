@@ -2,10 +2,11 @@ import cv2
 import glob
 import os
 
-def color_to_gray(filename_list , path_s):
+def color_to_gray(path_image_c , path_image_g):
     png = 'png'
-    cowl=1000
-    rowl=1000
+    cowl=512
+    rowl=640
+    filename_list = glob.glob(path_image_c)
     for openimj in filename_list:
         # print(openimj)
         name_imj = base = os.path.basename(openimj)
@@ -14,14 +15,17 @@ def color_to_gray(filename_list , path_s):
         name_n_imj = name_imj[:k] + png
         image = cv2.imread(openimj)
         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        if(gray_image.shape[0]<cowl):
-            cowl=gray_image.shape[0]
-        if (gray_image.shape[1]<rowl):
-            rowl = gray_image.shape[1]
-        print ("minimal cowl=", cowl)
-        print("minimal rowl=", rowl)
+        # if(gray_image.shape[0]<cowl):
+        #     cowl=gray_image.shape[0]
+        # if (gray_image.shape[1]<rowl):
+        #     rowl = gray_image.shape[1]
+        gray_image = cv2.resize(gray_image, (rowl, cowl))
+        cv2.imwrite(os.path.join(path_image_g, name_n_imj), gray_image)
 
-    gray_image = cv2.resize(gray_image, (rowl, cowl))
-    cv2.imwrite(os.path.join(path_s, name_n_imj), gray_image)
+    print("minimal cowl=", cowl)
+    print("minimal rowl=", rowl)
     print("color to gray saccesfull")
+
+def pr():
+    print("hellow")
 
