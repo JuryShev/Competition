@@ -21,16 +21,14 @@ def color_to_gray(path_image_c , path_image_g):
 
         flag_dark=0
         for i in range(4):
-            gray_image_est=comp_mean_light(img_O=gray_image[i],img_A=gray_image[i],w=gray_image[i].shape[1], h=gray_image[i].shape[0])
+            print("***********************************")
+            print("name=",name_n_imj, "square=", i)
+            gray_image[i] = comp_mean_light(gray_image[i],
+                                            w=gray_image[i].shape[1],
+                                            h=gray_image[i].shape[0])
 
-            if gray_image_est > 170:
-                flag_dark=1
-                gamma = 150 * 0.309 / gray_image_est
 
-                gray_image[i] = adjust_gamma(image=gray_image[i], gamma=gamma)
 
-                #print("mean_L=", np.mean(gray_image_est))
-                #print("mean_D=", np.mean(gray_image_dark_est))
 
         gray_image_stick=CutStickImage(gray_image, 0)
         # if flag_dark==1:
@@ -65,18 +63,18 @@ def viewTwoImage(img_O, img_A, name="img" ):
 def dark_image(img):
     kernel_0=np.array([[-0.1, 0.1, -0.1, 0.1,0.5,0.1,-0.1,0.1,-0.1]])
     kernel = np.ones((3, 3), np.float32)
-
-    kernel[0][0]=-0.1
-    kernel[0][1]=0.2
-    kernel[0][2]=-0.1
-
-    kernel[1][0] = 0.1
-    kernel[1][1] = 1.2
-    kernel[1][2] = 0.1
-
-    kernel[2][0] = -0.1
-    kernel[2][1] = 0.2
-    kernel[2][2] = -0.1
+    kernel = np.array([[1, 1, 1], [1, -8, 1], [1, 1, 1]], dtype=np.float32)
+    # kernel[0][0]=-0.1
+    # kernel[0][1]=0.2
+    # kernel[0][2]=-0.1
+    #
+    # kernel[1][0] = 0.1
+    # kernel[1][1] = 1.2
+    # kernel[1][2] = 0.1
+    #
+    # kernel[2][0] = -0.1
+    # kernel[2][1] = 0.2
+    # kernel[2][2] = -0.1
 
 
 
@@ -92,14 +90,23 @@ def dark_image(img):
 # import the necessary packages
 
 
-def adjust_gamma(image, gamma=1.0):
-    # build a lookup table mapping the pixel values [0, 255] to
-	# their adjusted gamma values
-    invGamma = 1.0 / gamma
-    table = np.array([((i / 255.0) ** invGamma) * 255
-		for i in np.arange(0, 256)]).astype("uint8")
-    # apply gamma correction using the lookup table
-    return cv2.LUT(image, table)
+def adjust_gamma(image, gray_image_est):
+
+        gamma = 150 * 0.709 / gray_image_est
+        # build a lookup table mapping the pixel values [0, 255] to
+        # their adjusted gamma values
+        invGamma = 1.0 / gamma
+        table = np.array([((i / 255.0) ** invGamma) * 255
+                          for i in np.arange(0, 256)]).astype("uint8")
+        image=cv2.LUT(image, table)
+        image_d=comp_mean_light(img_O=image,
+                        w=image.shape[1],
+                        h=image.shape[0])
+        # apply gamma correction using the lookup table
+        return image_d
+
+
+
 
 def CutStickImage(img, flag_choise=1):
     """
@@ -139,15 +146,36 @@ def CutStickImage(img, flag_choise=1):
 
 
 
-def comp_mean_light(img_O, img_A, w, h, flag_choise=1):
+def comp_mean_light(img_O, w, h, flag_choise=1):
 
     if flag_choise==1:
         gray_image_est = img_O.astype(np.float32).reshape(-1, h * w)
         gray_image_est = np.mean(gray_image_est)
+        print("          ------                   ")
+        print("gray_image_est=", gray_image_est)
+        if gray_image_est > 160:
 
-        return gray_image_est
+            img_A=adjust_gamma(img_O, gray_image_est)
 
-    gray_image_est = img_O.astype(np.float32).reshape(-1, h * w)
-    gray_image_dark_est = img_A.astype(np.float32).reshape(-1, h * w)
+            print("           *******                 ")
+            print("gray_image_est=", gray_image_est)
+            print("           *******                 ")
+            return img_A
+        else:
+
+            print("          ------                   ")
+            return img_O
+
+
+
+
+
+    # else:
+    #     gray_image_est = img_O.astype(np.float32).reshape(-1, h * w)
+    #     gray_image_dark_est = img_A.astype(np.float32).reshape(-1, h * w)
+    #
+    #     print("mean_L=", np.mean(gray_image_est))
+    #     print("mean_D=", np.mean(gray_image_dark_est))
+
 
 
