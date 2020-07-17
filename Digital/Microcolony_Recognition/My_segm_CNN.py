@@ -6,10 +6,10 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import Image_preprocessing
-
+from PIL import Image
+from PIL import ImageFilter
 import tensorflow as tf
 from tensorflow import keras
-
 ## Seeding
 seed = 2019
 random.seed = seed
@@ -43,14 +43,17 @@ class DataGen(keras.utils.Sequence):
         _mask_path=mask_path+name_mask
         image = cv2.imread(id_name, 1)
         #self.viewImage(image,'orig')
-        """resize off_______________________________________________"""
+        """resize off_______________________________________________
         image = cv2.resize(image, ( self.height, self.width))
+        ____________________________________________________________"""
         #self.viewImage(image, 'res')
 
 
         mask=cv2.imread(_mask_path, -1)
         #self.viewImage(mask, 'orig_m')
+        """resize off_______________________________________________
         mask = cv2.resize(mask, (self.height, self.width))
+        ____________________________________________________________"""
         #self.viewImage(mask, 'res_m')
         mask=np.expand_dims(mask, axis=-1)
 
@@ -81,9 +84,13 @@ class DataGen(keras.utils.Sequence):
         id_mask=0
         for id_name in files_batch:
             _img, _mask = self.__load__(id_name, id_mask)
-            image.append(_img)
-            mask.append(_mask)
-            id_mask=id_mask+1
+            _img_cut=Image_preprocessing.CutStickImage(_img)
+            _mask_cut = Image_preprocessing.CutStickImage(_mask)
+            for i in range(4):
+                image.append(_img_cut[i])
+                mask.append(_mask_cut[i])
+                id_mask=id_mask+1
+
         image = np.array(image)
         mask = np.array(mask)
 
@@ -95,25 +102,25 @@ class DataGen(keras.utils.Sequence):
     def __len__(self):
         return int(np.ceil(len(self.ids) / float(self.batch_size)))
 
-height=160
-width=128
+height=320
+width=256
 train_path = './Data_bacteria/train_g/*.png'
-epochs = 40
+epochs = 30
 batch_size = 5
 
 ## Training Ids
 train_ids = glob.glob(train_path)
 
 ## Validation Data Size
-val_data_size = 6
-select_data=train_ids[164:177]
+val_data_size = 20
+select_data=train_ids[0:69]
 random.shuffle(select_data)
 valid_ids = select_data[:val_data_size]
 train_ids = select_data[val_data_size:]
 
 gen = DataGen(train_ids, train_path, batch_size=batch_size, height=height, width=width)
-#x, y = gen.__getitem__(0)
-#print(x.shape, y.shape)
+# x, y = gen.__getitem__(0)
+# print(x.shape, y.shape)
 
 def viewTwoImage(img_O, img_A, name="img" ):
 
@@ -142,7 +149,7 @@ def bottleneck(x, filters, kernel_size=(3, 3), padding="same", strides=1):
 #########################################################
 
 def UNet():
-    f = [16, 32, 64, 128, 256]
+    f = [8, 16, 32, 64, 256]
     inputs = keras.layers.Input(( width, height, 3))
 
     p0 = inputs
@@ -161,11 +168,58 @@ def UNet():
     outputs = keras.layers.Conv2D(1, (1, 1), padding="same", activation="sigmoid")(u4)
     model = keras.models.Model(inputs, outputs)
     return model
+
+def predict_processing(img_predict, img_ans_neg, img_ans_orig, name=0 ):
+
+    ###################################################
+    y = Image_preprocessing.CutStickImage(img_ans_neg, 0)
+    x = Image_preprocessing.CutStickImage(img_ans_orig, 0)
+    result = Image_preprocessing.CutStickImage(img_predict, 0)
+    ####################################################
+
+
+    result_float = result * 255
+    result_v1 = result_float.astype('uint8')
+
+    ########################################################################################
+    #cv2.imwrite(os.path.join('./Data_bacteria/CNN_pred', 'result_float.png'), result_float)
+    ########################################################################################
+
+    result_v2 = cv2.morphologyEx(result_v1, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))
+    #pil_im = Image.fromarray(result_v2)
+    pil_im = Image.fromarray(result_v1[:, :, 0])
+    sharp_pil = pil_im.filter(ImageFilter.UnsharpMask(radius=2, percent=90, threshold=15))
+    sharp_img = np.array(sharp_pil)
+    sharp_img_mean = sharp_img[sharp_img.shape[0] - 20:sharp_img.shape[0] - 5, 5:20]
+    print(np.mean(sharp_img_mean))
+    result_bool = (sharp_img > np.mean(sharp_img_mean) + 120) | (sharp_img < np.mean(sharp_img_mean) - 5)
+    result_255 = result_bool * 255
+    result_255 = result_255.astype('uint8')
+
+
+    # image = cv2.imread('./Data_bacteria/CNN_pred/result_v1.png')
+    # Image_preprocessing.viewImage(result_v1, "result_v1")
+    # Image_preprocessing.viewImage(result_v2, "result_v2")
+    # Image_preprocessing.viewImage(sharp_img, "sharp_img")
+
+
+    result_open = cv2.morphologyEx(result_255, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    image_morpho = cv2.morphologyEx(result_open, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+    result_v2 = cv2.morphologyEx(image_morpho, cv2.MORPH_OPEN, np.ones((4, 4), np.uint8))
+
+    y_v1 = y * 255
+
+    Image_preprocessing.viewImage(x, "x")
+    Image_preprocessing.viewImage(y_v1, "y_v0")
+    Image_preprocessing.viewImage(result_255, "result_255")
+    Image_preprocessing.viewImage(image_morpho, "morpho")
+
+    Image_preprocessing.viewImage(result_v2, "result_v2")
 ################################################################
 
-action=2
+action=0
 model = UNet()
-if action==1:
+if action==-1:
 
     model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["acc"])
     model.summary()
@@ -178,25 +232,60 @@ if action==1:
 
     model.fit_generator(train_gen, validation_data=valid_gen, steps_per_epoch=train_steps, validation_steps=valid_steps,
                         epochs=epochs)
-    model.save_weights("ent_cloacae.h5")
-elif action==2:
-    a=5
+    model.save_weights("c_kefir.h5")
+
+
+elif action==0:
+    model.load_weights('c_kefir.h5')
     valid_gen = DataGen(valid_ids, train_path, height=height, width=width, batch_size=1)
     x, y = valid_gen.__getitem__(1)
     result = model.predict(x)
-    print(np.mean(result))
-    result = result > np.mean(result)+0.0042
-    result_v0 = np.reshape(result * 255, (width,height))
-    y_v0 = np.reshape(y[0] * 255, (width,height))
-    result_v0=result_v0.astype('uint8')
-    result_v1 = np.reshape(result * 255, (width,height))
-    y_v1 = np.reshape(y * 255, (width,height))
 
-    Image_preprocessing.viewImage(x[0], "y[0]")
-    Image_preprocessing.viewImage(y_v0, "y_v0")
-    Image_preprocessing.viewImage(result_v0, "result_v0")
+    predict_processing(result, y, x)
+elif action==1:
+    model.load_weights('ent_cloacae.h5')
+    valid_gen = DataGen(valid_ids, train_path, height=height, width=width, batch_size=1)
+    x, y = valid_gen.__getitem__(1)
+    result = model.predict(x)
 
-    print("finish")
+    predict_processing(result, y, x)
+
+elif action==2:
+    model.load_weights('klebsiella_pneumoniae.h5')
+    valid_gen = DataGen(valid_ids, train_path, height=height, width=width, batch_size=1)
+    x, y = valid_gen.__getitem__(1)
+    result = model.predict(x)
+
+    predict_processing(result, y, x)
+
+elif action==3:
+    model.load_weights('moraxella_catarrhalis.h5')
+    valid_gen = DataGen(valid_ids, train_path, height=height, width=width, batch_size=1)
+    x, y = valid_gen.__getitem__(1)
+    result = model.predict(x)
+
+    predict_processing(result, y, x)
+elif action==4:
+    model.load_weights('all.h5')
+    valid_gen = DataGen(valid_ids, train_path, height=height, width=width, batch_size=1)
+    x, y = valid_gen.__getitem__(1)
+    result = model.predict(x)
+
+    predict_processing(result, y, x)
+elif action==5:
+    model.load_weights('all.h5')
+    valid_gen = DataGen(valid_ids, train_path, height=height, width=width, batch_size=1)
+    x, y = valid_gen.__getitem__(1)
+    result = model.predict(x)
+
+    predict_processing(result, y, x)
+
+
+
+
+
+
+
 else:
     ## Dataset for prediction
     valid_gen = DataGen(valid_ids, train_path, height=height, width=width, batch_size=1)
